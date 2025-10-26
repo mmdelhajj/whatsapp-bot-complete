@@ -50,17 +50,23 @@ while [ -z "$ADMIN_PASS" ]; do
 done
 
 echo ""
-read -p "📱 ProxSMS Account ID: " WHATSAPP_ACCOUNT
-read -sp "🔑 ProxSMS Secret Key: " WHATSAPP_SECRET
+echo "📱 ProxSMS Configuration (from proxsms.com):"
+echo "   Get API Secret from: Tools -> API Keys"
+echo "   Get WhatsApp Unique ID from: Dashboard or /get/wa.accounts"
+echo "   Get Webhook Secret from: Tools -> Webhooks"
+echo ""
+read -sp "🔑 ProxSMS API Secret: " WHATSAPP_SECRET
+echo ""
+read -p "📱 WhatsApp Account Unique ID: " WHATSAPP_ACCOUNT
+read -sp "🔐 ProxSMS Webhook Secret: " WEBHOOK_SECRET
 echo ""
 
 echo ""
-read -sp "🤖 Anthropic API Key: " ANTHROPIC_KEY
+read -sp "🤖 Anthropic API Key (from console.anthropic.com): " ANTHROPIC_KEY
 echo ""
 
 # Generate secure passwords
 DB_PASS=$(openssl rand -base64 24)
-WEBHOOK_SECRET=$(openssl rand -hex 32)
 
 echo ""
 echo "╔═══════════════════════════════════════════════════════════╗"

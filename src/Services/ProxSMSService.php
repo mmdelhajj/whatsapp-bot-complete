@@ -10,9 +10,10 @@ class ProxSMSService {
     private $secret;
 
     public function __construct() {
+        // ProxSMS API endpoint for sending WhatsApp messages
         $this->apiUrl = WHATSAPP_API_URL;
-        $this->accountId = WHATSAPP_ACCOUNT_ID;
-        $this->secret = WHATSAPP_SEND_SECRET;
+        $this->accountId = WHATSAPP_ACCOUNT_ID;  // WhatsApp unique ID from /get/wa.accounts
+        $this->secret = WHATSAPP_SEND_SECRET;    // API secret from Tools -> API Keys
     }
 
     /**

@@ -49,7 +49,7 @@ define('BRAINS_ACCOUNTS_ENDPOINT', BRAINS_API_BASE . '/accounts');
 define('BRAINS_SALES_ENDPOINT', BRAINS_API_BASE . '/sales');
 
 // WhatsApp (ProxSMS) Configuration
-define('WHATSAPP_API_URL', 'https://api.proxsms.com/message/send');
+define('WHATSAPP_API_URL', 'http://proxsms.com/api/send/whatsapp');
 define('WHATSAPP_ACCOUNT_ID', env('WHATSAPP_ACCOUNT_ID'));
 define('WHATSAPP_SEND_SECRET', env('WHATSAPP_SEND_SECRET'));
 define('WHATSAPP_WEBHOOK_SECRET', env('WEBHOOK_SECRET', ''));

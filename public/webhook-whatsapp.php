@@ -2,6 +2,20 @@
 /**
  * WhatsApp Webhook Endpoint
  * Receives incoming messages from ProxSMS
+ *
+ * ProxSMS Webhook Format:
+ * [
+ *     "type" => "whatsapp",
+ *     "secret" => "YOUR_WEBHOOK_SECRET",
+ *     "data" => [
+ *         "id" => 2,
+ *         "wid" => "+639760713666",
+ *         "phone" => "+639760666713",
+ *         "message" => "Hello World!",
+ *         "attachment" => "http://imageurl.com/image.jpg",
+ *         "timestamp" => 1645684231
+ *     ]
+ * ]
  */
 
 // Load configuration
@@ -10,57 +24,60 @@ require_once dirname(__DIR__) . '/config/config.php';
 // Set headers
 header('Content-Type: application/json');
 
-// Log raw input
-$rawInput = file_get_contents('php://input');
-logMessage("Webhook received: " . $rawInput, 'DEBUG', WEBHOOK_LOG_FILE);
+// Get input (ProxSMS sends as POST form data)
+$input = $_REQUEST;
+
+// Log incoming webhook
+logMessage("Webhook received: " . json_encode($input), 'DEBUG', WEBHOOK_LOG_FILE);
 
 try {
-    // Parse JSON input
-    $input = json_decode($rawInput, true);
+    // Validate webhook secret (ProxSMS format)
+    $webhookSecret = env('WEBHOOK_SECRET', '');
 
-    if (json_last_error() !== JSON_ERROR_NONE) {
-        logMessage("Invalid JSON: " . json_last_error_msg(), 'ERROR', WEBHOOK_LOG_FILE);
-        http_response_code(400);
-        echo json_encode(['error' => 'Invalid JSON']);
-        exit;
-    }
+    if (!empty($webhookSecret)) {
+        $providedSecret = $input['secret'] ?? '';
 
-    // Validate webhook secret (if configured)
-    if (defined('WHATSAPP_WEBHOOK_SECRET') && !empty(WHATSAPP_WEBHOOK_SECRET)) {
-        $providedSecret = $_SERVER['HTTP_X_WEBHOOK_SECRET'] ?? ($input['secret'] ?? '');
-
-        if ($providedSecret !== WHATSAPP_WEBHOOK_SECRET) {
-            logMessage("Invalid webhook secret", 'WARNING', WEBHOOK_LOG_FILE);
+        if ($providedSecret !== $webhookSecret) {
+            logMessage("Invalid webhook secret provided", 'WARNING', WEBHOOK_LOG_FILE);
             http_response_code(403);
-            echo json_encode(['error' => 'Forbidden']);
+            echo json_encode(['error' => 'Invalid secret']);
             exit;
         }
     }
 
-    // Extract message data
-    $phone = $input['phone'] ?? $input['from'] ?? null;
-    $message = $input['message'] ?? $input['text'] ?? null;
-    $messageType = $input['type'] ?? 'text';
+    // Check payload type
+    $payloadType = $input['type'] ?? null;
 
-    // Validate required fields
-    if (!$phone || !$message) {
-        logMessage("Missing required fields: phone or message", 'ERROR', WEBHOOK_LOG_FILE);
-        http_response_code(400);
-        echo json_encode(['error' => 'Missing required fields']);
+    if ($payloadType !== 'whatsapp') {
+        logMessage("Ignoring non-WhatsApp payload type: {$payloadType}", 'INFO', WEBHOOK_LOG_FILE);
+        http_response_code(200);
+        echo json_encode(['status' => 'ignored', 'reason' => 'Not a WhatsApp message']);
         exit;
     }
 
-    // Process only text messages (ignore media for now)
-    if ($messageType !== 'text') {
-        logMessage("Ignoring non-text message type: {$messageType}", 'INFO', WEBHOOK_LOG_FILE);
-        http_response_code(200);
-        echo json_encode(['status' => 'ignored', 'reason' => 'non-text message']);
+    // Extract WhatsApp data (ProxSMS format)
+    // ProxSMS sends data as nested array
+    $data = is_array($input['data'] ?? null) ? $input['data'] : [];
+
+    // ProxSMS WhatsApp format:
+    // "phone" => sender phone number
+    // "message" => message text
+    // "attachment" => optional media URL
+    $phone = $data['phone'] ?? null;
+    $message = $data['message'] ?? null;
+    $attachment = $data['attachment'] ?? null;
+
+    // Validate required fields
+    if (!$phone || !$message) {
+        logMessage("Missing required fields in webhook data", 'ERROR', WEBHOOK_LOG_FILE);
+        http_response_code(400);
+        echo json_encode(['error' => 'Missing phone or message']);
         exit;
     }
 
     // Process the message
     $controller = new MessageController();
-    $result = $controller->processIncomingMessage($phone, $message);
+    $result = $controller->processIncomingMessage($phone, $message, $attachment);
 
     if ($result['success']) {
         logMessage("Message processed successfully for customer {$result['customer_id']}", 'INFO', WEBHOOK_LOG_FILE);

@@ -26,16 +26,20 @@ class MessageController {
     /**
      * Main message processing entry point
      */
-    public function processIncomingMessage($phone, $message) {
+    public function processIncomingMessage($phone, $message, $attachment = null) {
         try {
             // Log incoming message
-            logMessage("Incoming message from {$phone}: {$message}", 'INFO', WEBHOOK_LOG_FILE);
+            $logMsg = "Incoming message from {$phone}: {$message}";
+            if ($attachment) {
+                $logMsg .= " [Attachment: {$attachment}]";
+            }
+            logMessage($logMsg, 'INFO', WEBHOOK_LOG_FILE);
 
             // Find or create customer
             $customer = $this->customerModel->findOrCreateByPhone($phone);
 
             // Save incoming message
-            $this->messageModel->saveReceived($customer['id'], $message);
+            $this->messageModel->saveReceived($customer['id'], $message, $attachment);
 
             // Try to link customer with Brains account if not linked
             if (empty($customer['brains_account_code'])) {
