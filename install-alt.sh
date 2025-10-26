@@ -1,31 +1,21 @@
 #!/bin/bash
 ###############################################################################
-# WhatsApp Bot v4.0 - One-Click Installer for Ubuntu 22.04
-# Complete installation with Brains ERP integration
+# WhatsApp Bot v4.0 - Alternative Installer (Works with any PHP version)
+# Supports PHP 7.4, 8.0, 8.1, 8.2, 8.3
 ###############################################################################
 
 set -e
 
 echo "╔═══════════════════════════════════════════════════════════╗"
-echo "║     📚 WHATSAPP BOT v4.0 - COMPLETE INSTALLER            ║"
-echo "║        Brains ERP Integration | Claude AI                ║"
+echo "║     📚 WHATSAPP BOT v4.0 - ALTERNATIVE INSTALLER         ║"
+echo "║        Works with PHP 7.4+ (auto-detects version)        ║"
 echo "╚═══════════════════════════════════════════════════════════╝"
 echo ""
 
 # Check root
 if [ "$EUID" -ne 0 ]; then
-    echo "❌ Please run as root (use: sudo bash install.sh)"
+    echo "❌ Please run as root (use: sudo bash install-alt.sh)"
     exit 1
-fi
-
-# Check Ubuntu version
-if ! grep -q "22.04" /etc/os-release 2>/dev/null; then
-    echo "⚠️  Warning: This script is designed for Ubuntu 22.04"
-    read -p "Continue anyway? (y/N): " -n 1 -r
-    echo
-    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-        exit 1
-    fi
 fi
 
 # Check existing installation
@@ -60,53 +50,83 @@ while [ -z "$ADMIN_PASS" ]; do
 done
 
 echo ""
-read -p "📱 ProxSMS Account ID: " WHATSAPP_ACCOUNT
-read -sp "🔑 ProxSMS Secret Key: " WHATSAPP_SECRET
+echo "📱 ProxSMS Configuration (from proxsms.com):"
+echo "   Get API Secret from: Tools -> API Keys"
+echo "   Get WhatsApp Unique ID from: Dashboard or /get/wa.accounts"
+echo "   Get Webhook Secret from: Tools -> Webhooks"
+echo ""
+read -sp "🔑 ProxSMS API Secret: " WHATSAPP_SECRET
+echo ""
+read -p "📱 WhatsApp Account Unique ID: " WHATSAPP_ACCOUNT
+read -sp "🔐 ProxSMS Webhook Secret: " WEBHOOK_SECRET
 echo ""
 
 echo ""
-read -sp "🤖 Anthropic API Key: " ANTHROPIC_KEY
+read -sp "🤖 Anthropic API Key (from console.anthropic.com): " ANTHROPIC_KEY
 echo ""
 
 # Generate secure passwords
 DB_PASS=$(openssl rand -base64 24)
-WEBHOOK_SECRET=$(openssl rand -hex 32)
 
 echo ""
 echo "╔═══════════════════════════════════════════════════════════╗"
-echo "║  ⏳ Installing... (this may take 3-5 minutes)            ║"
+echo "║  ⏳ Installing... (this may take 5-10 minutes)           ║"
 echo "╚═══════════════════════════════════════════════════════════╝"
 echo ""
 
 export DEBIAN_FRONTEND=noninteractive
 
 # Update system
-echo "[1/9] 🔄 Updating system packages..."
-apt-get update -qq 2>&1 > /dev/null
+echo "[1/10] 🔄 Updating system packages..."
+apt-get update -qq
 
-# Add PHP 8.2 repository
-echo "[2/9] 📦 Adding PHP 8.2 repository..."
-apt-get install -y -qq software-properties-common 2>&1 > /dev/null
-add-apt-repository -y ppa:ondrej/php 2>&1 > /dev/null
-apt-get update -qq 2>&1 > /dev/null
+# Install basic packages first
+echo "[2/10] 📦 Installing basic packages..."
+apt-get install -y software-properties-common curl git openssl 2>&1 > /dev/null
 
-# Install packages
-echo "[3/9] 📦 Installing Nginx, PHP 8.2, MySQL, Redis..."
+# Try to add PHP 8.2 repository (but don't fail if it doesn't work)
+echo "[3/10] 📦 Adding PHP repository..."
+if LC_ALL=C.UTF-8 add-apt-repository -y ppa:ondrej/php 2>/dev/null; then
+    apt-get update -qq 2>&1 > /dev/null
+    echo "    ✅ PHP 8.2 repository added"
+else
+    echo "    ⚠️  Using system PHP version"
+fi
+
+# Detect available PHP version
+echo "[4/10] 🔍 Detecting PHP version..."
+PHP_VERSION=""
+for version in 8.3 8.2 8.1 8.0 7.4; do
+    if apt-cache show php${version}-fpm 2>/dev/null | grep -q "Package: php${version}-fpm"; then
+        PHP_VERSION=$version
+        break
+    fi
+done
+
+if [ -z "$PHP_VERSION" ]; then
+    echo "❌ No suitable PHP version found!"
+    echo "Available PHP packages:"
+    apt-cache search php.*-fpm | head -5
+    exit 1
+fi
+
+echo "    ✅ Using PHP $PHP_VERSION"
+
+# Install packages with detected PHP version
+echo "[5/10] 📦 Installing Nginx, PHP $PHP_VERSION, MySQL, Redis..."
 apt-get install -y -qq \
     nginx \
-    php8.2-fpm \
-    php8.2-mysql \
-    php8.2-curl \
-    php8.2-mbstring \
-    php8.2-xml \
+    php${PHP_VERSION}-fpm \
+    php${PHP_VERSION}-mysql \
+    php${PHP_VERSION}-curl \
+    php${PHP_VERSION}-mbstring \
+    php${PHP_VERSION}-xml \
     mysql-server \
     redis-server \
-    curl \
-    git \
     2>&1 > /dev/null
 
 # Setup MySQL
-echo "[4/9] 🗄️  Setting up MySQL database..."
+echo "[6/10] 🗄️  Setting up MySQL database..."
 mysql -u root <<SQL 2>/dev/null
 CREATE DATABASE IF NOT EXISTS whatsapp_bot CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 CREATE USER IF NOT EXISTS 'whatsapp_user'@'localhost' IDENTIFIED BY '$DB_PASS';
@@ -115,14 +135,14 @@ FLUSH PRIVILEGES;
 SQL
 
 # Create application directory
-echo "[5/9] 📁 Creating application structure..."
+echo "[7/10] 📁 Creating application structure..."
 mkdir -p /var/www/whatsapp-bot/{public,admin,logs,config,src/{Models,Services,Controllers},scripts,admin/pages,admin/assets}
 
 # Get script directory
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Copy application files
-echo "[6/9] 📋 Copying application files..."
+echo "[8/10] 📋 Copying application files..."
 if [ -d "$SCRIPT_DIR/src" ]; then
     cp -r "$SCRIPT_DIR/src"/* /var/www/whatsapp-bot/src/ 2>/dev/null || true
 fi
@@ -166,17 +186,19 @@ STORE_LOCATION=Tripoli, Lebanon
 ENV
 
 # Import database schema
-echo "[7/9] 🏗️  Creating database tables..."
+echo "[9/10] 🏗️  Creating database tables..."
 if [ -f "$SCRIPT_DIR/config/schema.sql" ]; then
     mysql -u root whatsapp_bot < "$SCRIPT_DIR/config/schema.sql" 2>/dev/null
 fi
 
-# Configure Nginx
-echo "[8/9] ⚙️  Configuring Nginx web server..."
-cat > /etc/nginx/sites-available/whatsapp-bot <<'NGINX'
+# Configure Nginx with detected PHP version
+echo "[10/10] ⚙️  Configuring Nginx web server..."
+PHP_SOCK="/run/php/php${PHP_VERSION}-fpm.sock"
+
+cat > /etc/nginx/sites-available/whatsapp-bot <<NGINX
 server {
     listen 80;
-    server_name DOMAIN_PLACEHOLDER;
+    server_name $DOMAIN;
     root /var/www/whatsapp-bot/public;
     index index.php;
 
@@ -186,7 +208,7 @@ server {
 
     # Public routes
     location / {
-        try_files $uri $uri/ /index.php?$query_string;
+        try_files \$uri \$uri/ /index.php?\$query_string;
     }
 
     # Admin routes
@@ -194,17 +216,17 @@ server {
         alias /var/www/whatsapp-bot/admin;
         index index.php;
 
-        location ~ \.php$ {
+        location ~ \.php\$ {
             include snippets/fastcgi-php.conf;
-            fastcgi_pass unix:/run/php/php8.2-fpm.sock;
-            fastcgi_param SCRIPT_FILENAME $request_filename;
+            fastcgi_pass unix:$PHP_SOCK;
+            fastcgi_param SCRIPT_FILENAME \$request_filename;
         }
     }
 
     # PHP processing
-    location ~ \.php$ {
+    location ~ \.php\$ {
         include snippets/fastcgi-php.conf;
-        fastcgi_pass unix:/run/php/php8.2-fpm.sock;
+        fastcgi_pass unix:$PHP_SOCK;
     }
 
     # Deny access to hidden files
@@ -214,9 +236,6 @@ server {
 }
 NGINX
 
-# Replace domain placeholder
-sed -i "s/DOMAIN_PLACEHOLDER/$DOMAIN/g" /etc/nginx/sites-available/whatsapp-bot
-
 ln -sf /etc/nginx/sites-available/whatsapp-bot /etc/nginx/sites-enabled/
 rm -f /etc/nginx/sites-enabled/default
 
@@ -224,7 +243,8 @@ rm -f /etc/nginx/sites-enabled/default
 nginx -t 2>/dev/null && systemctl reload nginx
 
 # Create admin user
-echo "[9/9] 👤 Creating admin user..."
+echo ""
+echo "👤 Creating admin user..."
 HASH=$(php -r "echo password_hash('$ADMIN_PASS', PASSWORD_BCRYPT);")
 mysql -u root whatsapp_bot <<ADMIN 2>/dev/null
 INSERT INTO admin_users (username, password, role) VALUES ('$ADMIN_USER', '$HASH', 'admin')
@@ -260,6 +280,8 @@ cat > /root/.whatsapp-bot-creds <<CREDS
 
 📝 Configuration File: /var/www/whatsapp-bot/.env
 
+🐘 PHP Version: $PHP_VERSION
+
 🔄 Manual Sync Command:
    php /var/www/whatsapp-bot/scripts/sync_from_brains.php
 
@@ -267,7 +289,7 @@ cat > /root/.whatsapp-bot-creds <<CREDS
    tail -f /var/www/whatsapp-bot/logs/webhook.log
 
 🛠️  Restart Services:
-   systemctl restart php8.2-fpm nginx
+   systemctl restart php${PHP_VERSION}-fpm nginx
 
 ═══════════════════════════════════════════════════════════
 
