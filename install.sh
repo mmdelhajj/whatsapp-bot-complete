@@ -81,11 +81,17 @@ echo ""
 export DEBIAN_FRONTEND=noninteractive
 
 # Update system
-echo "[1/8] 🔄 Updating system packages..."
+echo "[1/9] 🔄 Updating system packages..."
+apt-get update -qq 2>&1 > /dev/null
+
+# Add PHP 8.2 repository
+echo "[2/9] 📦 Adding PHP 8.2 repository..."
+apt-get install -y -qq software-properties-common 2>&1 > /dev/null
+add-apt-repository -y ppa:ondrej/php 2>&1 > /dev/null
 apt-get update -qq 2>&1 > /dev/null
 
 # Install packages
-echo "[2/8] 📦 Installing Nginx, PHP 8.2, MySQL, Redis..."
+echo "[3/9] 📦 Installing Nginx, PHP 8.2, MySQL, Redis..."
 apt-get install -y -qq \
     nginx \
     php8.2-fpm \
@@ -100,7 +106,7 @@ apt-get install -y -qq \
     2>&1 > /dev/null
 
 # Setup MySQL
-echo "[3/8] 🗄️  Setting up MySQL database..."
+echo "[4/9] 🗄️  Setting up MySQL database..."
 mysql -u root <<SQL 2>/dev/null
 CREATE DATABASE IF NOT EXISTS whatsapp_bot CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 CREATE USER IF NOT EXISTS 'whatsapp_user'@'localhost' IDENTIFIED BY '$DB_PASS';
@@ -109,14 +115,14 @@ FLUSH PRIVILEGES;
 SQL
 
 # Create application directory
-echo "[4/8] 📁 Creating application structure..."
+echo "[5/9] 📁 Creating application structure..."
 mkdir -p /var/www/whatsapp-bot/{public,admin,logs,config,src/{Models,Services,Controllers},scripts,admin/pages,admin/assets}
 
 # Get script directory
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Copy application files
-echo "[5/8] 📋 Copying application files..."
+echo "[6/9] 📋 Copying application files..."
 if [ -d "$SCRIPT_DIR/src" ]; then
     cp -r "$SCRIPT_DIR/src"/* /var/www/whatsapp-bot/src/ 2>/dev/null || true
 fi
@@ -160,13 +166,13 @@ STORE_LOCATION=Tripoli, Lebanon
 ENV
 
 # Import database schema
-echo "[6/8] 🏗️  Creating database tables..."
+echo "[7/9] 🏗️  Creating database tables..."
 if [ -f "$SCRIPT_DIR/config/schema.sql" ]; then
     mysql -u root whatsapp_bot < "$SCRIPT_DIR/config/schema.sql" 2>/dev/null
 fi
 
 # Configure Nginx
-echo "[7/8] ⚙️  Configuring Nginx web server..."
+echo "[8/9] ⚙️  Configuring Nginx web server..."
 cat > /etc/nginx/sites-available/whatsapp-bot <<'NGINX'
 server {
     listen 80;
@@ -218,7 +224,7 @@ rm -f /etc/nginx/sites-enabled/default
 nginx -t 2>/dev/null && systemctl reload nginx
 
 # Create admin user
-echo "[8/8] 👤 Creating admin user..."
+echo "[9/9] 👤 Creating admin user..."
 HASH=$(php -r "echo password_hash('$ADMIN_PASS', PASSWORD_BCRYPT);")
 mysql -u root whatsapp_bot <<ADMIN 2>/dev/null
 INSERT INTO admin_users (username, password, role) VALUES ('$ADMIN_USER', '$HASH', 'admin')
