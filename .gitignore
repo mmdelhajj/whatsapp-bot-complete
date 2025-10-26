@@ -1,0 +1,10 @@
+.env
+.env.*
+logs/
+*.log
+cache/
+uploads/
+.DS_Store
+*.swp
+vendor/
+node_modules/
