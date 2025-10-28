@@ -206,31 +206,48 @@ server {
     access_log /var/www/whatsapp-bot/logs/access.log;
     error_log /var/www/whatsapp-bot/logs/error.log;
 
+    # Admin routes - IMPORTANT: This must come before the main location block
+    location ^~ /admin/ {
+        alias /var/www/whatsapp-bot/admin/;
+        index index.php;
+
+        # Handle PHP files in admin directory
+        location ~ \.php\$ {
+            if (!-f \$request_filename) { return 404; }
+            include fastcgi_params;
+            fastcgi_pass unix:$PHP_SOCK;
+            fastcgi_index index.php;
+            fastcgi_param SCRIPT_FILENAME \$request_filename;
+        }
+
+        # Serve static files
+        try_files \$uri \$uri/ =404;
+    }
+
+    # Handle /admin without trailing slash
+    location = /admin {
+        return 301 /admin/;
+    }
+
     # Public routes
     location / {
         try_files \$uri \$uri/ /index.php?\$query_string;
     }
 
-    # Admin routes
-    location /admin {
-        alias /var/www/whatsapp-bot/admin;
-        index index.php;
-
-        location ~ \.php\$ {
-            include snippets/fastcgi-php.conf;
-            fastcgi_pass unix:$PHP_SOCK;
-            fastcgi_param SCRIPT_FILENAME \$request_filename;
-        }
-    }
-
-    # PHP processing
+    # PHP files in public directory
     location ~ \.php\$ {
         include snippets/fastcgi-php.conf;
         fastcgi_pass unix:$PHP_SOCK;
+        fastcgi_param SCRIPT_FILENAME \$document_root\$fastcgi_script_name;
     }
 
     # Deny access to hidden files
     location ~ /\. {
+        deny all;
+    }
+
+    # Deny access to sensitive files
+    location ~* \.(env|md)\$ {
         deny all;
     }
 }
